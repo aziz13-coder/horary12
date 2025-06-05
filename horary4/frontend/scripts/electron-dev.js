@@ -13,15 +13,34 @@
 const { spawn } = require('child_process');
 const http = require('http');
 const path = require('path');
+const net = require('net');
 
-const DEV_SERVER_PORT = 3000;
-const DEV_SERVER_URL = `http://localhost:${DEV_SERVER_PORT}`;
+const DEV_SERVER_PORT = parseInt(process.env.VITE_DEV_PORT, 10) || 3000;
+
+async function findAvailablePort(port) {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.once('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        resolve(findAvailablePort(port + 1));
+      } else {
+        reject(err);
+      }
+    });
+    server.once('listening', () => {
+      const available = server.address().port;
+      server.close(() => resolve(available));
+    });
+    server.listen(port, '127.0.0.1');
+  });
+}
 
 class ElectronDevManager {
   constructor() {
     this.viteProcess = null;
     this.electronProcess = null;
     this.isShuttingDown = false;
+    this.devServerUrl = `http://localhost:${DEV_SERVER_PORT}`;
   }
 
   log(message, type = 'info') {
@@ -74,14 +93,22 @@ class ElectronDevManager {
 
   async startViteServer() {
     this.log('Starting Vite development server...', 'vite');
-    
+
     const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
     const frontendDir = path.join(__dirname, '..');
 
-    this.viteProcess = spawn(npmCmd, ['run', 'dev'], {
+    const port = await findAvailablePort(DEV_SERVER_PORT);
+    this.devServerUrl = `http://localhost:${port}`;
+
+    if (port !== DEV_SERVER_PORT) {
+      this.log(`Port ${DEV_SERVER_PORT} in use, using ${port} instead`, 'warning');
+    }
+
+    this.viteProcess = spawn(npmCmd, ['run', 'dev', '--', '--port', String(port)], {
       cwd: frontendDir,
       stdio: ['inherit', 'pipe', 'pipe'],
-      env: { ...process.env, FORCE_COLOR: '1' }
+      env: { ...process.env, FORCE_COLOR: '1' },
+      shell: true
     });
 
     this.viteProcess.stdout.on('data', (data) => {
@@ -107,7 +134,7 @@ class ElectronDevManager {
     });
 
     // Wait for the server to be ready
-    await this.checkServerReady(DEV_SERVER_URL);
+    await this.checkServerReady(this.devServerUrl);
   }
 
   async startElectron() {
@@ -117,11 +144,12 @@ class ElectronDevManager {
     
     this.electronProcess = spawn(electronPath, ['.'], {
       stdio: ['inherit', 'pipe', 'pipe'],
-      env: { 
-        ...process.env, 
+      env: {
+        ...process.env,
         NODE_ENV: 'development',
         ELECTRON_ENABLE_LOGGING: '1'
-      }
+      },
+      shell: true
     });
 
     this.electronProcess.stdout.on('data', (data) => {
@@ -219,7 +247,7 @@ class ElectronDevManager {
       await this.startElectron();
       
       this.log('Development environment started successfully!', 'success');
-      this.log(`Frontend: ${DEV_SERVER_URL}`, 'info');
+      this.log(`Frontend: ${this.devServerUrl}`, 'info');
       this.log('Press Ctrl+C to stop', 'info');
       
     } catch (error) {
@@ -249,7 +277,8 @@ This script:
 4. Handles graceful shutdown
 
 Environment Variables:
-  VITE_DEV_PORT       Port for Vite dev server (default: 3000)
+  VITE_DEV_PORT       Preferred port for Vite dev server (default: 3000).
+                      If the port is in use, the next free port is selected.
   ELECTRON_LOG_LEVEL  Electron logging level (default: info)
 
 Examples:
