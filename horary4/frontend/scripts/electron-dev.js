@@ -81,7 +81,8 @@ class ElectronDevManager {
     this.viteProcess = spawn(npmCmd, ['run', 'dev'], {
       cwd: frontendDir,
       stdio: ['inherit', 'pipe', 'pipe'],
-      env: { ...process.env, FORCE_COLOR: '1' }
+      env: { ...process.env, FORCE_COLOR: '1' },
+      shell: true
     });
 
     this.viteProcess.stdout.on('data', (data) => {
@@ -117,11 +118,12 @@ class ElectronDevManager {
     
     this.electronProcess = spawn(electronPath, ['.'], {
       stdio: ['inherit', 'pipe', 'pipe'],
-      env: { 
-        ...process.env, 
+      env: {
+        ...process.env,
         NODE_ENV: 'development',
         ELECTRON_ENABLE_LOGGING: '1'
-      }
+      },
+      shell: true
     });
 
     this.electronProcess.stdout.on('data', (data) => {
