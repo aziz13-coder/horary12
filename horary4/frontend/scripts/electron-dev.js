@@ -75,7 +75,11 @@ class ElectronDevManager {
   async startViteServer() {
     this.log('Starting Vite development server...', 'vite');
     
-    this.viteProcess = spawn('npm', ['run', 'dev'], {
+    const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+    const frontendDir = path.join(__dirname, '..');
+
+    this.viteProcess = spawn(npmCmd, ['run', 'dev'], {
+      cwd: frontendDir,
       stdio: ['inherit', 'pipe', 'pipe'],
       env: { ...process.env, FORCE_COLOR: '1' }
     });
